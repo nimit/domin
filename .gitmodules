@@ -1,0 +1,3 @@
+[submodule "third-party/IsaacLab"]
+	path = third-party/IsaacLab
+	url = https://github.com/nimit/IsaacLab.git
