@@ -7,6 +7,8 @@ from .src.lerobot_dataset import LeRobotDataset
 from .src.utils import build_dataset_frame, hw_to_dataset_features
 from .src.control_utils import sanity_check_dataset_resume
 import os
+import torch
+from typing import Any
 
 # DEFAULT_FEATURES = {
 #     "timestamp": {"dtype": "float32", "shape": (1,), "names": None},
@@ -46,6 +48,7 @@ class DatasetRecordConfig:
     default_task: str
     # names of all the joints
     joint_names: list[str]
+    robot_type: str
     # A name and camera resolution in (width, height) tuple
     cameras: dict[str, tuple[int, int]] = field(default_factory=dict)
     # Root directory where the dataset will be stored (e.g. 'dataset/path').
@@ -77,7 +80,7 @@ class DatasetRecordConfig:
 
     resume_recording: bool = False
 
-    robot_type: str = "SO100"
+    num_envs: int = 1
 
     def __post_init__(self):
         if self.default_task is None:
@@ -142,22 +145,28 @@ class DatasetRecord:
             )
 
         self.rerecord_count = 0
+        self.active_episodes = {} # env_idx -> episode_index
+        self.pending_rerecords = {} # env_idx -> episode_index (to be retried in next story)
+        self.episode_counter = 0
+        self.total_rerecords = 0
+        self.recording_start_time = time.time()
 
     def __enter__(self):
         print("Started Recording")
-        now = time.perf_counter()
-        self.recording_start = now
-        self.episode_start = now
-        self.episode_num = 0
-        self.steps = 0
-
+        if self.cfg.resume_recording:
+             self.episode_counter = self.dataset.meta.total_episodes
+        
+        self.new_story()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         print("Exited context manager....")
-        now = time.perf_counter()
-        self.recording_end = now
-        self._finish_recording()
+        self.finish_episodes(list(self.active_episodes.keys()))
+        
+        # Save metrics
+        total_time = time.time() - self.recording_start_time
+        self.save_metadata("total_time_s", total_time)
+        self.save_metadata("total_rerecords", self.total_rerecords)
 
         if exc_type:
             print(f"Exception: {exc_type}, {exc_value}")
@@ -165,63 +174,130 @@ class DatasetRecord:
 
         return False
 
-    def new_epsiode(self, task: str | None = None):
-        self.current_task = task
-        if self.steps == 0:  # type: ignore
-            print(
-                f"Changed current task to {task}. No step recorded; not creating a new episode"
-            )
-            return
-        print(f"Saving episode (idx: {self.episode_num}/re: {self.rerecord_count})")
-        self.dataset.save_episode()
-        self.episode_start = time.perf_counter()
-        self.episode_num += 1
-        self.steps = 0
+    def new_story(self, tasks: list[str] | None = None):
+        # Finish any remaining active episodes from previous story
+        if self.active_episodes:
+            self.finish_episodes(list(self.active_episodes.keys()))
+            
+        print(f"Starting new story with {self.cfg.num_envs} episodes")
+        for env_idx in range(self.cfg.num_envs):
+            # Check if this env has a pending re-record
+            if env_idx in self.pending_rerecords:
+                episode_index = self.pending_rerecords.pop(env_idx)
+                print(f"Env {env_idx}: Retrying episode {episode_index}")
+            else:
+                episode_index = self.episode_counter
+                self.episode_counter += 1
+                
+            self.active_episodes[env_idx] = episode_index
+            
+            # Set task for this episode if provided
+            if tasks and env_idx < len(tasks):
+                 # We need a way to set task per episode in LeRobotDataset or just pass it to add_frame
+                 # Currently add_frame takes a task string. 
+                 # We can store current tasks in a dict
+                 pass 
+                 # TODO: Support per-episode task in step/add_frame?
+                 # Have to also determine how to handle episode task in case of re-record
+                 # For now, we rely on self.current_task or cfg.default_task.
+                 # If tasks list is provided, we might need to store it.
+        
+        if tasks:
+            self.current_tasks = tasks # env_idx -> task str
+        else:
+            self.current_tasks = None
 
-    def rerecord(self):
-        if self.dataset.image_writer is not None:
-            self.dataset.image_writer.wait_until_done()
-        self.dataset.clear_episode_buffer()
-        self.steps = 0
-        self.rerecord_count += 1
-        self.episode_start = time.perf_counter()
-        print(
-            f"\n\nRerecording current episode (idx: {self.episode_num} | re: {self.rerecord_count})"
-        )
+    def finish_episodes(self, env_idxs: int | list[int] | torch.Tensor):
+        if isinstance(env_idxs, int):
+            env_idxs = [env_idxs]
+        elif isinstance(env_idxs, torch.Tensor):
+            env_idxs = env_idxs.tolist()
+            
+        for env_idx in env_idxs:
+            if env_idx not in self.active_episodes:
+                continue
+                
+            episode_index = self.active_episodes[env_idx]
+            print(f"Saving episode {episode_index} (env {env_idx})")
+            self.dataset.save_episode(episode_index)
+            del self.active_episodes[env_idx]
+            
+        # Removed push_to_hub from here as requested
 
-    def _finish_recording(self):
-        print("Finishing recording")
-        self.dataset.save_episode()
+    def rerecord(self, env_idxs: int | list[int] | torch.Tensor):
+        if isinstance(env_idxs, int):
+            env_idxs = [env_idxs]
+        elif isinstance(env_idxs, torch.Tensor):
+            env_idxs = env_idxs.tolist()
 
-        if self.cfg.push_to_hub:
-            self.dataset.push_to_hub(tags=self.cfg.tags, private=self.cfg.private)
+        for env_idx in env_idxs:
+            if env_idx not in self.active_episodes:
+                continue
+                
+            episode_index = self.active_episodes[env_idx]
+            if self.dataset.image_writer is not None:
+                self.dataset.image_writer.wait_until_done()
+            
+            self.dataset.clear_episode_buffer(episode_index)
+            
+            # Schedule for next story
+            self.pending_rerecords[env_idx] = episode_index
+            
+            # Remove from active episodes so we stop recording for this story
+            del self.active_episodes[env_idx]
+            
+            self.total_rerecords += 1
+            print(f"Rerecording env {env_idx}: scheduled retry of ep={episode_index} in next story")
+
+    def save_metadata(self, key: str, value: Any):
+        self.dataset.save_metadata(key, value)
 
     # observation = {images: {}, motors: []}
     # action = {motors: []}
     @safe_stop_image_writer
-    def step(self, motor_obs, action, cam_obs={}):
+    def step(self, motor_obs: torch.Tensor, action: torch.Tensor, cam_obs: dict[str, torch.Tensor] = {}):
         joint_names = self.cfg.joint_names
+        num_envs = self.cfg.num_envs
+        
+        # Validate shapes
+        if motor_obs.shape[0] != num_envs:
+             # Try to unsqueeze if num_envs is 1 and input is not batched
+             if num_envs == 1 and motor_obs.ndim == 1:
+                 motor_obs = motor_obs.unsqueeze(0)
+                 action = action.unsqueeze(0)
+                 cam_obs = {k: v.unsqueeze(0) for k, v in cam_obs.items()}
+             else:
+                 raise ValueError(f"Expected batch size {num_envs}, got {motor_obs.shape[0]}")
 
-        assert len(cam_obs) == len(self.cfg.cameras), (
-            f"{len(cam_obs)} != {len(self.cfg.cameras)}"
-        )
-        assert len(motor_obs) == len(joint_names), (
-            f"{len(motor_obs)} != {len(joint_names)}"
-        )
-        assert len(action) == len(joint_names), f"{len(action)} != {len(joint_names)}"
+        for env_idx in range(num_envs):
+            if env_idx not in self.active_episodes:
+                continue
+                
+            episode_index = self.active_episodes[env_idx]
+            
+            # Extract single env data
+            env_motor_obs = motor_obs[env_idx].cpu().numpy()
+            env_action = action[env_idx].cpu().numpy()
+            env_cam_obs = {k: v[env_idx].cpu().numpy() for k, v in cam_obs.items()}
+            
+            observation = {**{x[0]: x[1] for x in zip(joint_names, env_motor_obs)}, **env_cam_obs}
+            action_dict = {x[0]: x[1] for x in zip(joint_names, env_action)}
 
-        observation = {**{x[0]: x[1] for x in zip(joint_names, motor_obs)}, **cam_obs}
-        action = {x[0]: x[1] for x in zip(joint_names, action)}
+            observation_frame = build_dataset_frame(
+                self.features, observation, prefix="observation"
+            )
+            action_frame = build_dataset_frame(self.features, action_dict, prefix="action")
+            frame = {**observation_frame, **action_frame}
+            
+            # Determine task
+            task = self.cfg.default_task
+            if hasattr(self, "current_tasks") and self.current_tasks and env_idx < len(self.current_tasks):
+                task = self.current_tasks[env_idx]
+            elif self.current_task is not None:
+                task = self.current_task
 
-        observation_frame = build_dataset_frame(
-            self.features, observation, prefix="observation"
-        )
-        action_frame = build_dataset_frame(self.features, action, prefix="action")
-        frame = {**observation_frame, **action_frame}
-        self.dataset.add_frame(
-            frame,
-            task=self.current_task
-            if self.current_task is not None
-            else self.cfg.default_task,
-        )
-        self.steps += 1
+            self.dataset.add_frame(
+                frame,
+                task=task,
+                episode_index=episode_index
+            )

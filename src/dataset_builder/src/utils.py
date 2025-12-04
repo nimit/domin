@@ -901,12 +901,15 @@ def validate_episode_buffer(episode_buffer: dict, total_episodes: int, features:
     if "task" not in episode_buffer:
         raise ValueError("task key not found in episode_buffer")
 
-    if episode_buffer["episode_index"] != total_episodes:
-        # TODO(aliberts): Add option to use existing episode_index
-        raise NotImplementedError(
-            "You might have manually provided the episode_buffer with an episode_index that doesn't "
-            "match the total number of episodes already in the dataset. This is not supported for now."
-        )
+    # if episode_buffer["episode_index"] != total_episodes:
+    #     # TODO(aliberts): Add option to use existing episode_index
+    #     # NOTE: This check is disabled to support simultaneous episode recording and re-recording.
+    #     # In these cases, we might be saving an episode with an index that is not the next sequential one
+    #     # (e.g. re-recording episode 0 while total_episodes is 5).
+    #     raise NotImplementedError(
+    #         "You might have manually provided the episode_buffer with an episode_index that doesn't "
+    #         "match the total number of episodes already in the dataset. This is not supported for now."
+    #     )
 
     if episode_buffer["size"] == 0:
         raise ValueError(

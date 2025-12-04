@@ -17,7 +17,7 @@ import contextlib
 import logging
 import shutil
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Any
 
 import datasets
 import numpy as np
@@ -256,6 +256,14 @@ class LeRobotDatasetMetadata:
             "task": task,
         }
         append_jsonlines(task_dict, self.root / TASKS_PATH)
+
+    def save_metadata(self, key: str, value: Any) -> None:
+        """
+        Save arbitrary metadata to the dataset info.
+        This updates the info.json file immediately.
+        """
+        self.info[key] = value
+        write_info(self.info, self.root)
 
     def save_episode(
         self,
@@ -500,7 +508,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         # Unused attributes
         self.image_writer = None
-        self.episode_buffer = None
+        self.episode_buffers = {}
 
         self.root.mkdir(exist_ok=True, parents=True)
 
@@ -817,6 +825,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         return item
 
+    def save_metadata(self, key: str, value: Any) -> None:
+        """
+        Save arbitrary metadata to the dataset info.
+        This updates the info.json file immediately.
+        """
+        self.meta.save_metadata(key, value)
+
     def __repr__(self):
         feature_keys = list(self.features)
         return (
@@ -838,6 +853,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
         ep_buffer["task"] = []
         for key in self.features:
             ep_buffer[key] = current_ep_idx if key == "episode_index" else []
+        
+        self.episode_buffers[current_ep_idx] = ep_buffer
         return ep_buffer
 
     def _get_image_file_path(
@@ -858,11 +875,17 @@ class LeRobotDataset(torch.utils.data.Dataset):
         else:
             self.image_writer.save_image(image=image, fpath=fpath)
 
-    def add_frame(self, frame: dict, task: str, timestamp: float | None = None) -> None:
+    def add_frame(self, frame: dict, task: str, episode_index: int, timestamp: float | None = None) -> None:
         """
-        This function only adds the frame to the episode_buffer. Apart from images — which are written in a
-        temporary directory — nothing is written to disk. To save those frames, the 'save_episode()' method
-        then needs to be called.
+        Add a frame to the episode buffer for the specified episode index.
+        Images are written to a temporary directory.
+        Nothing is written to the final dataset files until 'save_episode()' is called.
+        
+        Args:
+            frame (dict): Dictionary containing frame data (observations, actions).
+            task (str): Task description.
+            episode_index (int): Index of the episode this frame belongs to.
+            timestamp (float | None, optional): Timestamp of the frame. Defaults to None (calculated from fps).
         """
         # Convert torch to numpy if needed
         for name in frame:
@@ -871,16 +894,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         validate_frame(frame, self.features)
 
-        if self.episode_buffer is None:
-            self.episode_buffer = self.create_episode_buffer()
+        if episode_index not in self.episode_buffers:
+            self.create_episode_buffer(episode_index)
+        
+        episode_buffer = self.episode_buffers[episode_index]
 
         # Automatically add frame_index and timestamp to episode buffer
-        frame_index = self.episode_buffer["size"]
+        # Automatically add frame_index and timestamp to episode buffer
+        frame_index = episode_buffer["size"]
         if timestamp is None:
             timestamp = frame_index / self.fps
-        self.episode_buffer["frame_index"].append(frame_index)
-        self.episode_buffer["timestamp"].append(timestamp)
-        self.episode_buffer["task"].append(task)
+        episode_buffer["frame_index"].append(frame_index)
+        episode_buffer["timestamp"].append(timestamp)
+        episode_buffer["task"].append(task)
 
         # Add frame features to episode_buffer
         for key in frame:
@@ -891,43 +917,56 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
             if self.features[key]["dtype"] in ["image", "video"]:
                 img_path = self._get_image_file_path(
-                    episode_index=self.episode_buffer["episode_index"],
+                    episode_index=episode_buffer["episode_index"],
                     image_key=key,
                     frame_index=frame_index,
                 )
                 if frame_index == 0:
                     img_path.parent.mkdir(parents=True, exist_ok=True)
                 self._save_image(frame[key], img_path)
-                self.episode_buffer[key].append(str(img_path))
+                episode_buffer[key].append(str(img_path))
             else:
-                self.episode_buffer[key].append(frame[key])
+                episode_buffer[key].append(frame[key])
 
-        self.episode_buffer["size"] += 1
+        episode_buffer["size"] += 1
 
-    def save_episode(self, episode_data: dict | None = None) -> None:
+    def save_episode(self, episode_index: int, episode_data: dict | None = None) -> None:
         """
-        This will save to disk the current episode in self.episode_buffer.
-
+        Save the episode buffer for the specified episode index to disk.
+        This writes the parquet file and updates metadata.
+        
         Args:
-            episode_data (dict | None, optional): Dict containing the episode data to save. If None, this will
-                save the current episode in self.episode_buffer, which is filled with 'add_frame'. Defaults to
-                None.
+            episode_index (int): Index of the episode to save.
+            episode_data (dict | None, optional): Optional dictionary containing episode data to save directly.
+                If None, saves the accumulated buffer for episode_index. Defaults to None.
         """
         if not episode_data:
-            episode_buffer = self.episode_buffer
+            if episode_index not in self.episode_buffers:
+                raise ValueError(f"Episode {episode_index} not found in buffers.")
+            episode_buffer = self.episode_buffers[episode_index]
+
+        # Wait for asynchronous image writer to finish before saving
+        self._wait_image_writer()
 
         validate_episode_buffer(episode_buffer, self.meta.total_episodes, self.features)
 
         # size and task are special cases that won't be added to hf_dataset
-        episode_length = episode_buffer.pop("size")
-        tasks = episode_buffer.pop("task")
+        # episode_length = episode_buffer.pop("size")
+        # tasks = episode_buffer.pop("task")
+        episode_length = episode_buffer["size"]
+        tasks = episode_buffer["task"]
         episode_tasks = list(set(tasks))
-        episode_index = episode_buffer["episode_index"]
+        # episode_index is already in the buffer, but we can verify it matches
+        assert episode_buffer["episode_index"] == episode_index
 
-        episode_buffer["index"] = np.arange(
+        # Work on a shallow copy to avoid mutating the original buffer in case of failure (retry)
+        # and to keep episode_index as a scalar in the original buffer.
+        save_buffer = episode_buffer.copy()
+
+        save_buffer["index"] = np.arange(
             self.meta.total_frames, self.meta.total_frames + episode_length
         )
-        episode_buffer["episode_index"] = np.full((episode_length,), episode_index)
+        save_buffer["episode_index"] = np.full((episode_length,), episode_index)
 
         # Add new tasks to the tasks dictionary
         for task in episode_tasks:
@@ -936,7 +975,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 self.meta.add_task(task)
 
         # Given tasks in natural language, find their corresponding task indices
-        episode_buffer["task_index"] = np.array(
+        save_buffer["task_index"] = np.array(
             [self.meta.get_task_index(task) for task in tasks]
         )
 
@@ -948,16 +987,16 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 "video",
             ]:
                 continue
-            episode_buffer[key] = np.stack(episode_buffer[key])
+            save_buffer[key] = np.stack(save_buffer[key])
 
         self._wait_image_writer()
-        self._save_episode_table(episode_buffer, episode_index)
-        ep_stats = compute_episode_stats(episode_buffer, self.features)
+        self._save_episode_table(save_buffer, episode_index)
+        ep_stats = compute_episode_stats(save_buffer, self.features)
 
         if len(self.meta.video_keys) > 0:
             video_paths = self.encode_episode_videos(episode_index)
             for key in self.meta.video_keys:
-                episode_buffer[key] = video_paths[key]
+                save_buffer[key] = video_paths[key]
 
         # `meta.save_episode` be executed after encoding the videos
         self.meta.save_episode(episode_index, episode_length, episode_tasks, ep_stats)
@@ -965,8 +1004,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
         ep_data_index = get_episode_data_index(self.meta.episodes, [episode_index])
         ep_data_index_np = {k: t.numpy() for k, t in ep_data_index.items()}
         check_timestamps_sync(
-            episode_buffer["timestamp"],
-            episode_buffer["episode_index"],
+            save_buffer["timestamp"],
+            save_buffer["episode_index"],
             ep_data_index_np,
             self.fps,
             self.tolerance_s,
@@ -978,13 +1017,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
         parquet_files = list(self.root.rglob("*.parquet"))
         assert len(parquet_files) == self.num_episodes
 
-        # delete images
-        img_dir = self.root / "images"
-        if img_dir.is_dir():
-            shutil.rmtree(self.root / "images")
-
-        if not episode_data:  # Reset the buffer
-            self.episode_buffer = self.create_episode_buffer()
+        if not episode_data:  # Remove from buffers
+            del self.episode_buffers[episode_index]
 
     def _save_episode_table(self, episode_buffer: dict, episode_index: int) -> None:
         episode_dict = {key: episode_buffer[key] for key in self.hf_features}
@@ -998,8 +1032,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
         ep_data_path.parent.mkdir(parents=True, exist_ok=True)
         ep_dataset.to_parquet(ep_data_path)
 
-    def clear_episode_buffer(self) -> None:
-        episode_index = self.episode_buffer["episode_index"]
+    def clear_episode_buffer(self, episode_index: int) -> None:
+        """
+        Clear the episode buffer for the specified episode index.
+        This removes any temporary image files and deletes the buffer from memory.
+        Useful for discarding failed episodes (re-recording).
+        
+        Args:
+            episode_index (int): Index of the episode to clear.
+        """
+        if episode_index not in self.episode_buffers:
+            return
+            
+        episode_buffer = self.episode_buffers[episode_index]
         if self.image_writer is not None:
             for cam_key in self.meta.camera_keys:
                 img_dir = self._get_image_file_path(
@@ -1008,8 +1053,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 if img_dir.is_dir():
                     shutil.rmtree(img_dir)
 
-        # Reset the buffer
-        self.episode_buffer = self.create_episode_buffer()
+        # Remove the buffer
+        del self.episode_buffers[episode_index]
 
     def start_image_writer(self, num_processes: int = 0, num_threads: int = 4) -> None:
         if isinstance(self.image_writer, AsyncImageWriter):
@@ -1099,7 +1144,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             obj.start_image_writer(image_writer_processes, image_writer_threads)
 
         # TODO(aliberts, rcadene, alexander-soare): Merge this with OnlineBuffer/DataBuffer
-        obj.episode_buffer = obj.create_episode_buffer()
+        obj.episode_buffers = {}
 
         obj.episodes = None
         obj.hf_dataset = obj.create_hf_dataset()
