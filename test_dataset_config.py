@@ -28,6 +28,7 @@ class TestDatasetConfig(BaseDatasetConfig):
     robot_cfg: ArticulationCfg = FRANKA_PANDA_CFG.replace(  # type: ignore
         prim_path="{ENV_REGEX_NS}/Robot"
     )
+    default_task: str = "test_task"
     # took 12s for 5 envs, took 90s for 50 envs
     scene_cfg: InteractiveSceneCfg = TestSceneCfg(num_envs=10)
 

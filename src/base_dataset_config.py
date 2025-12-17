@@ -36,19 +36,44 @@ class BaseDatasetConfig:
     Base configuration for a simulation dataset.
     """
 
-    # Scene configuration
-    scene_cfg: InteractiveSceneCfg
-
     # Robot configuration
     robot_cfg: ArticulationCfg
 
-    random_start_enabled: bool = False
+    # Scene configuration
+    scene_cfg: InteractiveSceneCfg
+
     eval_mode: bool = False
 
     # General settings
     dataset_path: str = ""
+    start_poses_file: str = ""  # Path to CSV file with start poses
     hf_repo_id: str = ""
     num_envs: int = 1
+    version: int = 0
+
+    # Robot specific configuration
+    ee_body_name: str = "ee_link"
+    arm_joint_names: str = ".*"
+    hand_joint_names: str = ".*"
+
+    # Randomization ranges
+    # dict of object name -> (pos_range, rot_range)
+    random_ranges: Dict[str, Tuple[np.ndarray, np.ndarray]] = field(
+        default_factory=dict
+    )
+
+    # Dataset recording settings
+    default_task: str = field(default=None)  # Mandatory
+    robot_type: str = "franka_panda"
+    fps: int = 30
+    episode_time_s: float = 60.0
+    reset_time_s: float = 60.0
+    num_episodes: int = 50
+    video: bool = True
+    push_to_hub: bool = False
+    tags: List[str] = field(default_factory=list)
+    num_image_writer_processes: int = 0
+    num_image_writer_threads_per_camera: int = 4
 
     # camera_eye: torch.tensor
 
@@ -57,23 +82,18 @@ class BaseDatasetConfig:
         Post-initialization processing.
         Generates a timestamp-based dataset path if not specified.
         """
+        if self.default_task is None:
+            raise ValueError("default_task must be provided in config")
+
         if not self.dataset_path:
             # Generate a unique name based on current timestamp
             # timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             timestamp = datetime.now().isoformat(timespec="seconds")
-            self.dataset_path = f"datasets/{self.__class__.__name__}_{timestamp}"
+            self.dataset_path = f"datasets/{self.__class__.__name__}_{timestamp}_v{self.version}"
 
         self.scene_cfg.robot = self.robot_cfg.replace(prim_path="{ENV_REGEX_NS}/Robot")  # type: ignore
 
-    def random_start(self) -> "BaseDatasetConfig":
-        """
-        Enable random start configuration.
 
-        Returns:
-            self for chaining.
-        """
-        self.random_start_enabled = True
-        return self
 
     def eval(self) -> "BaseDatasetConfig":
         """
@@ -90,19 +110,95 @@ class BaseDatasetConfig:
     # robot from_file/random (only quat/whole pose) - right now let's do only quat (complexity)
     # objects from_file/random
 
+    def load_start_poses(self) -> Dict[int, Dict[str, torch.Tensor]]:
+        """
+        Load start poses from CSV file.
+        Format: ep_idx, robot, obj_name1, obj_name2, ...
+        Each cell contains a list of floats (13 dims for root state) encoded as JSON string.
+        
+        Returns:
+            Dict mapping episode_index -> {object_name: pose_tensor}
+        """
+        if not self.start_poses_file:
+            return {}
+
+        import csv
+        import json
+        poses = {}
+        with open(self.start_poses_file, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if not row: continue
+                ep_idx = int(row['ep_idx'])
+                poses[ep_idx] = {}
+                
+                for key, value in row.items():
+                    if key == 'ep_idx': continue
+                    if not value: continue
+                    try:
+                        state_list = json.loads(value)
+                        poses[ep_idx][key] = torch.tensor(state_list)
+                    except json.JSONDecodeError:
+                        print(f"Warning: Could not decode state for {key} in episode {ep_idx}")
+                        
+        return poses
+
+    def save_start_poses(self, poses: Dict[int, Dict[str, torch.Tensor]], append: bool = False):
+        """
+        Save start poses to CSV file.
+        """
+        if not self.start_poses_file:
+            return
+
+        import csv
+        import os
+        import json
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.start_poses_file), exist_ok=True)
+        
+        # Determine all object names from the first entry
+        if not poses:
+            return
+            
+        first_ep = next(iter(poses.values()))
+        fieldnames = ['ep_idx'] + list(first_ep.keys())
+        
+        mode = 'a' if append and os.path.exists(self.start_poses_file) else 'w'
+        write_header = mode == 'w' or os.path.getsize(self.start_poses_file) == 0
+
+        with open(self.start_poses_file, mode) as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if write_header:
+                writer.writeheader()
+                
+            for ep_idx, obj_poses in poses.items():
+                row = {'ep_idx': ep_idx}
+                for obj_name, state in obj_poses.items():
+                    row[obj_name] = json.dumps(state.tolist())
+                writer.writerow(row)
+
     # for now, only implement object random API (will return fixed poses instead of random poses (TODO))
     def get_random_object_pose(self, props: SimProps) -> Dict[str, torch.Tensor]:
-        # TODO (feat): parameterize random_range
         """
         Get random object positions
-
-        Returns:
-
         """
-        return {
-            k: torch.tensor([[0.1, 0.1, 0, 0, 0, 0, 0] for _ in range(self.num_envs)])
-            for k in props.objs_size
-        }
+        # Default implementation using random_ranges if available, otherwise fixed
+        poses = {}
+        for k in props.objs_size:
+            if k in self.random_ranges:
+                # TODO: Implement actual randomization logic using self.random_ranges[k]
+                # For now, just return a default pose or implement simple randomization here
+                # This is a placeholder for the actual randomization logic
+                poses[k] = torch.tensor(
+                    [[0.6, 0.05, 0.05, 1, 0, 0, 0] for _ in range(self.num_envs)]
+                )
+            else:
+                poses[k] = torch.tensor(
+                    [[0.6, 0.05, 0.05, 1, 0, 0, 0] for _ in range(self.num_envs)]
+                )
+
+        return poses
         # placed_pos = [[] for _ in range(self.num_envs)]
 
         # def get_asset_positions() -> np.ndarray:
@@ -122,16 +218,19 @@ class BaseDatasetConfig:
 
         return {}
 
-    def get_targets(self, start: SimState) -> Any:
+    def get_targets(
+        self, start: SimState
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Calculate or retrieve targets for all envs.
-        List of positions the end effector should ik to...
 
         Args:
-            Accepts start positions of all the rigid objects and the robot (for all envs)
+            start: SimState containing start positions of all rigid objects and the robot.
 
         Returns:
-            The target(s) for the environment.
+            Tuple containing:
+                - target_pose: Tensor of shape (num_envs, 7) for end-effector pose (pos + quat)
+                - auxiliary_commands: Optional Tensor for other commands (e.g., gripper joint positions)
         """
         raise NotImplementedError("get_targets must be implemented by subclass")
 

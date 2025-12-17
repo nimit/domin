@@ -145,24 +145,23 @@ class DatasetRecord:
             )
 
         self.rerecord_count = 0
-        self.active_episodes = {} # env_idx -> episode_index
-        self.pending_rerecords = {} # env_idx -> episode_index (to be retried in next story)
+        self.active_episodes = {}  # env_idx -> episode_index
+        self.pending_rerecords = {}  # env_idx -> episode_index (to be retried in next story)
         self.episode_counter = 0
         self.total_rerecords = 0
         self.recording_start_time = time.time()
+        self.steps_in_story = 0
 
     def __enter__(self):
         print("Started Recording")
         if self.cfg.resume_recording:
-             self.episode_counter = self.dataset.meta.total_episodes
-        
-        self.new_story()
+            self.episode_counter = self.dataset.meta.total_episodes
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         print("Exited context manager....")
         self.finish_episodes(list(self.active_episodes.keys()))
-        
+
         # Save metrics
         total_time = time.time() - self.recording_start_time
         self.save_metadata("total_time_s", total_time)
@@ -175,10 +174,12 @@ class DatasetRecord:
         return False
 
     def new_story(self, tasks: list[str] | None = None):
+        self.current_tasks = tasks  # env_idx -> task str
+
         # Finish any remaining active episodes from previous story
-        if self.active_episodes:
+        if self.steps_in_story and self.active_episodes:
             self.finish_episodes(list(self.active_episodes.keys()))
-            
+
         print(f"Starting new story with {self.cfg.num_envs} episodes")
         for env_idx in range(self.cfg.num_envs):
             # Check if this env has a pending re-record
@@ -188,40 +189,36 @@ class DatasetRecord:
             else:
                 episode_index = self.episode_counter
                 self.episode_counter += 1
-                
+
             self.active_episodes[env_idx] = episode_index
-            
+
             # Set task for this episode if provided
             if tasks and env_idx < len(tasks):
-                 # We need a way to set task per episode in LeRobotDataset or just pass it to add_frame
-                 # Currently add_frame takes a task string. 
-                 # We can store current tasks in a dict
-                 pass 
-                 # TODO: Support per-episode task in step/add_frame?
-                 # Have to also determine how to handle episode task in case of re-record
-                 # For now, we rely on self.current_task or cfg.default_task.
-                 # If tasks list is provided, we might need to store it.
-        
-        if tasks:
-            self.current_tasks = tasks # env_idx -> task str
-        else:
-            self.current_tasks = None
+                # We need a way to set task per episode in LeRobotDataset or just pass it to add_frame
+                # Currently add_frame takes a task string.
+                # We can store current tasks in a dict
+                pass
+                # TODO: Support per-episode task in step/add_frame?
+                # Have to also determine how to handle episode task in case of re-record
+                # For now, we rely on self.current_task or cfg.default_task.
+                # If tasks list is provided, we might need to store it.
+        self.steps_in_story = 0
 
     def finish_episodes(self, env_idxs: int | list[int] | torch.Tensor):
         if isinstance(env_idxs, int):
             env_idxs = [env_idxs]
         elif isinstance(env_idxs, torch.Tensor):
             env_idxs = env_idxs.tolist()
-            
+
         for env_idx in env_idxs:
             if env_idx not in self.active_episodes:
                 continue
-                
+
             episode_index = self.active_episodes[env_idx]
             print(f"Saving episode {episode_index} (env {env_idx})")
             self.dataset.save_episode(episode_index)
             del self.active_episodes[env_idx]
-            
+
         # Removed push_to_hub from here as requested
 
     def rerecord(self, env_idxs: int | list[int] | torch.Tensor):
@@ -233,21 +230,23 @@ class DatasetRecord:
         for env_idx in env_idxs:
             if env_idx not in self.active_episodes:
                 continue
-                
+
             episode_index = self.active_episodes[env_idx]
             if self.dataset.image_writer is not None:
                 self.dataset.image_writer.wait_until_done()
-            
+
             self.dataset.clear_episode_buffer(episode_index)
-            
+
             # Schedule for next story
             self.pending_rerecords[env_idx] = episode_index
-            
+
             # Remove from active episodes so we stop recording for this story
             del self.active_episodes[env_idx]
-            
+
             self.total_rerecords += 1
-            print(f"Rerecording env {env_idx}: scheduled retry of ep={episode_index} in next story")
+            print(
+                f"Rerecording env {env_idx}: scheduled retry of ep={episode_index} in next story"
+            )
 
     def save_metadata(self, key: str, value: Any):
         self.dataset.save_metadata(key, value)
@@ -255,49 +254,62 @@ class DatasetRecord:
     # observation = {images: {}, motors: []}
     # action = {motors: []}
     @safe_stop_image_writer
-    def step(self, motor_obs: torch.Tensor, action: torch.Tensor, cam_obs: dict[str, torch.Tensor] = {}):
+    def step(
+        self,
+        motor_obs: torch.Tensor,
+        action: torch.Tensor,
+        cam_obs: dict[str, torch.Tensor] = {},
+    ):
         joint_names = self.cfg.joint_names
         num_envs = self.cfg.num_envs
-        
+
         # Validate shapes
         if motor_obs.shape[0] != num_envs:
-             # Try to unsqueeze if num_envs is 1 and input is not batched
-             if num_envs == 1 and motor_obs.ndim == 1:
-                 motor_obs = motor_obs.unsqueeze(0)
-                 action = action.unsqueeze(0)
-                 cam_obs = {k: v.unsqueeze(0) for k, v in cam_obs.items()}
-             else:
-                 raise ValueError(f"Expected batch size {num_envs}, got {motor_obs.shape[0]}")
+            # Try to unsqueeze if num_envs is 1 and input is not batched
+            if num_envs == 1 and motor_obs.ndim == 1:
+                motor_obs = motor_obs.unsqueeze(0)
+                action = action.unsqueeze(0)
+                cam_obs = {k: v.unsqueeze(0) for k, v in cam_obs.items()}
+            else:
+                raise ValueError(
+                    f"Expected batch size {num_envs}, got {motor_obs.shape[0]}"
+                )
 
         for env_idx in range(num_envs):
             if env_idx not in self.active_episodes:
                 continue
-                
+
             episode_index = self.active_episodes[env_idx]
-            
+
             # Extract single env data
             env_motor_obs = motor_obs[env_idx].cpu().numpy()
             env_action = action[env_idx].cpu().numpy()
             env_cam_obs = {k: v[env_idx].cpu().numpy() for k, v in cam_obs.items()}
-            
-            observation = {**{x[0]: x[1] for x in zip(joint_names, env_motor_obs)}, **env_cam_obs}
+
+            observation = {
+                **{x[0]: x[1] for x in zip(joint_names, env_motor_obs)},
+                **env_cam_obs,
+            }
             action_dict = {x[0]: x[1] for x in zip(joint_names, env_action)}
 
             observation_frame = build_dataset_frame(
                 self.features, observation, prefix="observation"
             )
-            action_frame = build_dataset_frame(self.features, action_dict, prefix="action")
+            action_frame = build_dataset_frame(
+                self.features, action_dict, prefix="action"
+            )
             frame = {**observation_frame, **action_frame}
-            
+
             # Determine task
             task = self.cfg.default_task
-            if hasattr(self, "current_tasks") and self.current_tasks and env_idx < len(self.current_tasks):
+            if (
+                hasattr(self, "current_tasks")
+                and self.current_tasks
+                and env_idx < len(self.current_tasks)
+            ):
                 task = self.current_tasks[env_idx]
             elif self.current_task is not None:
                 task = self.current_task
 
-            self.dataset.add_frame(
-                frame,
-                task=task,
-                episode_index=episode_index
-            )
+            self.dataset.add_frame(frame, task=task, episode_index=episode_index)
+        self.steps_in_story = 0
