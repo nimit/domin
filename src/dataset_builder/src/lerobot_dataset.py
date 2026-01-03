@@ -853,7 +853,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         ep_buffer["task"] = []
         for key in self.features:
             ep_buffer[key] = current_ep_idx if key == "episode_index" else []
-        
+
         self.episode_buffers[current_ep_idx] = ep_buffer
         return ep_buffer
 
@@ -875,12 +875,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
         else:
             self.image_writer.save_image(image=image, fpath=fpath)
 
-    def add_frame(self, frame: dict, task: str, episode_index: int, timestamp: float | None = None) -> None:
+    def add_frame(
+        self, frame: dict, task: str, episode_index: int, timestamp: float | None = None
+    ) -> None:
         """
         Add a frame to the episode buffer for the specified episode index.
         Images are written to a temporary directory.
         Nothing is written to the final dataset files until 'save_episode()' is called.
-        
+
         Args:
             frame (dict): Dictionary containing frame data (observations, actions).
             task (str): Task description.
@@ -896,7 +898,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         if episode_index not in self.episode_buffers:
             self.create_episode_buffer(episode_index)
-        
+
         episode_buffer = self.episode_buffers[episode_index]
 
         # Automatically add frame_index and timestamp to episode buffer
@@ -930,11 +932,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         episode_buffer["size"] += 1
 
-    def save_episode(self, episode_index: int, episode_data: dict | None = None) -> None:
+    def save_episode(
+        self, episode_index: int, episode_data: dict | None = None
+    ) -> None:
         """
         Save the episode buffer for the specified episode index to disk.
         This writes the parquet file and updates metadata.
-        
+
         Args:
             episode_index (int): Index of the episode to save.
             episode_data (dict | None, optional): Optional dictionary containing episode data to save directly.
@@ -1016,6 +1020,11 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         parquet_files = list(self.root.rglob("*.parquet"))
         assert len(parquet_files) == self.num_episodes
+        
+        # delete images
+        img_dir = self.root / "images"
+        if img_dir.is_dir():
+            shutil.rmtree(self.root / "images")
 
         if not episode_data:  # Remove from buffers
             del self.episode_buffers[episode_index]
@@ -1037,13 +1046,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
         Clear the episode buffer for the specified episode index.
         This removes any temporary image files and deletes the buffer from memory.
         Useful for discarding failed episodes (re-recording).
-        
+
         Args:
             episode_index (int): Index of the episode to clear.
         """
         if episode_index not in self.episode_buffers:
             return
-            
+
         episode_buffer = self.episode_buffers[episode_index]
         if self.image_writer is not None:
             for cam_key in self.meta.camera_keys:

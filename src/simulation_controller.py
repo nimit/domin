@@ -4,7 +4,6 @@ Simulation controller for managing the simulation loop.
 
 import argparse
 import torch
-import time
 import isaaclab.sim as sim_utils
 from isaaclab.scene import InteractiveScene
 from isaaclab.app import AppLauncher
@@ -19,11 +18,22 @@ from .base_dataset_config import BaseDatasetConfig
 from .sim_state import SimProps, SimState
 from .dataset_builder import DatasetRecord, DatasetRecordConfig
 
+# TODO (bug): video creation and replacement on re-record
+# TODO (bug): images folder not deleted after episode finishes recording
+# TODO (bug): loss of IK accuracy with >1 envs
+# TODO (test): dataset record w/ multiple envs, partial and complete re-records, graceful exit
+
 # TODO (optimization): resets/re-records happen for a whole story together. There is potential for optimization here.
 # The current assumption is: since the tasks and environments are going to be more or less the same, the number of steps required for completion in each environment will be within a close range of each other. But, can add an optimization that does away with the "story" concept and starts/ends episodes individually while keeping others running
 
+# TODO (feat): Add config param to record x frames after success (in final position)
 # TODO (feat): Keyboard events (with toggle)
 # TODO (feat): Record number of steps taken for each key (maybe save aggregate metrics in dataset metadata)
+# TODO (feat): log positions and other data
+# TODO (feat): using config.is_success
+# 0. check config.is_success and depending on the result,
+#     - if mode==eval, just update statistics based on string key
+#     - if mode==generation, retry same episode if failure, new episode if success + write statistics
 
 
 # Only supports homogeneous envs (config should be same among all envs)!
@@ -90,20 +100,13 @@ class SimulationController:
 
         print(f"Simulation Controller initialized in {self.mode} mode.")
 
-    # TODO (CRITICAL)
-    # using config.is_success
-    # 0. check config.is_success and depending on the result,
-    #     - if mode==eval, just update statistics based on string key
-    #     - if mode==generation, retry same episode if failure, new episode if success + write statistics
 
     def save_props(self):
         """
         Save properties (`SimProps`) that are not changing throughout the simulation.
         """
         self.cameras = {
-            k: v.cfg
-            for k, v in self.scene.sensors.items()
-            if v is isinstance(v, Camera)
+            k: v.cfg for k, v in self.scene.sensors.items() if isinstance(v, Camera)
         }
         self.objects = {
             k: v for k, v in self.scene.rigid_objects.items() if "object" in k
@@ -354,8 +357,6 @@ class SimulationController:
 
         assert self.simulation_app.is_running()
 
-        from .dataset_builder import DatasetRecord, DatasetRecordConfig
-
         rec_cfg = DatasetRecordConfig(
             repo_id=self.config.hf_repo_id,
             robot_type=self.config.robot_type,
@@ -376,7 +377,6 @@ class SimulationController:
         )
         self.dataset = DatasetRecord(rec_cfg)
 
-        # TODO: multiple targets
         diff_ik_cfg = DifferentialIKControllerCfg(
             command_type="pose", use_relative_mode=False, ik_method="dls"
         )
@@ -384,7 +384,7 @@ class SimulationController:
             diff_ik_cfg, num_envs=self.scene.num_envs, device=self.sim.device
         )
 
-        # TODO (CRITICAL): THIS IS ONLY TEMPORARY. FIGURE OUT A BETTER SOLUTION FOR IK
+        # TODO (CRITICAL): robot entity resolution IS ONLY TEMPORARY. FIGURE OUT A BETTER SOLUTION FOR IK
         # Resolve Robot Entities
         # Arm
         arm_entity_cfg = SceneEntityCfg(
@@ -421,8 +421,8 @@ class SimulationController:
 
                 start_state = self.get_state()
 
-                # Reset internal state of config if needed (e.g. state machine)
-                # TODO: Make this cleaner
+                # Reset internal state of config
+                # TODO (critical): Make this cleaner (remove config state and save/derive it from controller state in config)
                 if hasattr(self.config, "_env_states"):
                     self.config._env_states.fill_(0)
                     self.config._state_timers.fill_(0)
@@ -431,6 +431,7 @@ class SimulationController:
                     self.sim.step()
                     self.scene.update(self.sim.get_physics_dt())
 
+                prev_state = None
                 # We loop until all envs are done (success or max steps)
                 for step in range(500):
                     # Get targets (pose + auxiliary/gripper)
@@ -490,11 +491,13 @@ class SimulationController:
                         if "rgb" in sensor.data.output:
                             cam_obs[cam_name] = sensor.data.output["rgb"]
 
-                    self.dataset.step(
-                        motor_obs=current_state.robot_joints,
-                        action=action,
-                        cam_obs=cam_obs,
-                    )
+                    if prev_state is not None:
+                        self.dataset.step(
+                            motor_obs=prev_state,
+                            action=current_state.robot_joints,
+                            cam_obs=cam_obs,
+                        )
+                    prev_state = current_state.robot_joints
 
                     self.scene.write_data_to_sim()
                     self.sim.step()

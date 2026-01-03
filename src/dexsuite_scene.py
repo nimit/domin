@@ -4,6 +4,9 @@ from isaaclab_assets.robots import KUKA_ALLEGRO_CFG
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.sensors import CameraCfg
+
+from .utils import xyz_to_quat
 
 
 @configclass
@@ -85,13 +88,82 @@ class DexSuiteSceneCfg(InteractiveSceneCfg):
     ground = AssetBaseCfg(
         prim_path="/World/defaultGroundPlane",
         spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.0, 0.0, -1.05)
-        ),  # Adjust based on table height if needed, but table is usually at 0?
-        # Wait, SeattleLabTable usually has surface at some height.
-        # If table is at (0.5, 0, 0), the surface is likely at z > 0.
-        # Let's assume table surface is around z=0 if we want robot to interact easily,
-        # but usually we place table on ground.
-        # If ground is at -1.05, table base is at -1.05?
-        # Let's put ground at 0 and table on ground.
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.05)),
+    )
+
+    # cameras
+    camera_front = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Camera_Front",
+        update_period=0.1,
+        height=400,
+        width=400,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0,
+            focus_distance=1.0,
+            horizontal_aperture=20.955,
+            clipping_range=(0.1, 1.0e5),
+        ),
+        offset=CameraCfg.OffsetCfg(
+            pos=(0.35, -2.0, 1.25),
+            rot=tuple(xyz_to_quat(0, 25, 90).tolist()),
+            convention="world",
+        ),
+    )
+
+    camera_left = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Camera_Left",
+        update_period=0.1,
+        height=400,
+        width=400,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0,
+            focus_distance=1.0,
+            horizontal_aperture=20.955,
+            clipping_range=(0.1, 1.0e5),
+        ),
+        offset=CameraCfg.OffsetCfg(
+            pos=(-2.15, 0.0, 1.75),
+            rot=tuple(xyz_to_quat(0, 30, 0).tolist()),
+            convention="world",
+        ),
+    )
+
+    camera_right = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Camera_Right",
+        update_period=0.1,
+        height=400,
+        width=400,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0,
+            focus_distance=1.0,
+            horizontal_aperture=20.955,
+            clipping_range=(0.1, 1.0e5),
+        ),
+        offset=CameraCfg.OffsetCfg(
+            pos=(2.85, 0.0, 1.75),
+            rot=tuple(xyz_to_quat(0, 30, 180).tolist()),
+            convention="world",
+        ),
+    )
+
+    camera_top = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Camera_Top",
+        update_period=0.1,
+        height=400,
+        width=400,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0,
+            focus_distance=1.0,
+            horizontal_aperture=20.955,
+            clipping_range=(0.1, 1.0e5),
+        ),
+        offset=CameraCfg.OffsetCfg(
+            pos=(0.35, 0.0, 3.0),
+            rot=tuple(xyz_to_quat(0, 90, 0).tolist()),
+            convention="world",
+        ),
     )

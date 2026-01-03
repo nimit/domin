@@ -6,11 +6,9 @@ These functions handle non-simulation tasks such as file I/O, data processing, a
 import numpy as np
 import torch
 import math
-from typing import List, Tuple, Dict, Any, Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from isaaclab.assets import RigidObject, Articulation
-    from isaaclab.scene import InteractiveScene
+from isaaclab.utils.math import quat_from_euler_xyz
+from isaaclab.assets import RigidObject, Articulation
+from isaaclab.scene import InteractiveScene
 
 
 def calculate_distance(pos1: np.ndarray, pos2: np.ndarray) -> float:
@@ -27,7 +25,7 @@ def calculate_distance(pos1: np.ndarray, pos2: np.ndarray) -> float:
     return np.linalg.norm(pos1 - pos2)
 
 
-def xyz_to_quat(x: float, y: float, z: float) -> torch.Tensor:
+def xyz_to_quat(*xyz) -> torch.Tensor:
     """
     Convert Euler angles (in degrees) to quaternion (w, x, y, z).
 
@@ -39,9 +37,17 @@ def xyz_to_quat(x: float, y: float, z: float) -> torch.Tensor:
     Returns:
         Quaternion as a torch tensor (w, x, y, z).
     """
-    from isaaclab.utils.math import quat_from_euler_xyz
 
     # Convert degrees to radians and to tensor
+    if len(xyz) == 3:
+        x, y, z = xyz
+    elif len(xyz) == 1 and len(xyz[0]) == 3:
+        x, y, z = xyz[0]
+    else:
+        raise ValueError(
+            "Need roll, pitch and yaw all the Euler angles to convert to quaternion form."
+        )
+
     roll = torch.tensor(math.radians(x))
     pitch = torch.tensor(math.radians(y))
     yaw = torch.tensor(math.radians(z))
@@ -141,12 +147,12 @@ def will_overlap(pos1: np.ndarray, pos2: np.ndarray, size) -> bool:
 
 def randomize_object_positions(
     scene: "InteractiveScene",
-    object_names: List[str],
-    workspace_bounds: Tuple[
-        Tuple[float, float], Tuple[float, float]
+    object_names: list[str],
+    workspace_bounds: tuple[
+        tuple[float, float], tuple[float, float]
     ],  # ((x_min, x_max), (y_min, y_max))
     z_height: float,
-    object_sizes: Dict[str, float],
+    object_sizes: dict[str, float],
     min_distance: float = 0.1,
 ) -> torch.Tensor:
     """
@@ -226,7 +232,7 @@ def randomize_object_positions(
 
 
 def reset_to_random_robot_pose(
-    robot: "Articulation", joint_ranges: Dict[str, Tuple[float, float]]
+    robot: "Articulation", joint_ranges: dict[str, tuple[float, float]]
 ):
     """
     Reset robot joints to random positions within specified ranges.

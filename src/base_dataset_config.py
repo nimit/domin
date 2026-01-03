@@ -3,10 +3,14 @@ Base configuration class for dataset generation.
 """
 
 from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 import numpy as np
 import torch
+import csv
+import os
+import json
 
 from isaaclab.assets import (
     RigidObject,
@@ -25,13 +29,14 @@ from .utils import sample_from_ellipsoid, will_overlap
 # same for other randomizations
 
 
+# TODO:
 # Encode the whole config in a config file and add it to the dataset
 # create config from file should also be an option
 # hurdle: how to encode a function?
 
 
-@dataclass
-class BaseDatasetConfig:
+@dataclass(kw_only=True)
+class BaseDatasetConfig(ABC):
     """
     Base configuration for a simulation dataset.
     """
@@ -46,7 +51,10 @@ class BaseDatasetConfig:
 
     # General settings
     dataset_path: str = ""
-    start_poses_file: str = ""  # Path to CSV file with start poses
+
+    # Path to CSV file with start poses
+    start_poses_file: str = ""
+
     hf_repo_id: str = ""
     num_envs: int = 1
     version: int = 0
@@ -63,9 +71,9 @@ class BaseDatasetConfig:
     )
 
     # Dataset recording settings
-    default_task: str = field(default=None)  # Mandatory
+    default_task: str
     robot_type: str = "franka_panda"
-    fps: int = 30
+    fps: int = 60
     episode_time_s: float = 60.0
     reset_time_s: float = 60.0
     num_episodes: int = 50
@@ -122,8 +130,6 @@ class BaseDatasetConfig:
         if not self.start_poses_file:
             return {}
 
-        import csv
-        import json
         poses = {}
         with open(self.start_poses_file, 'r') as f:
             reader = csv.DictReader(f)
@@ -150,10 +156,6 @@ class BaseDatasetConfig:
         if not self.start_poses_file:
             return
 
-        import csv
-        import os
-        import json
-        
         # Ensure directory exists
         os.makedirs(os.path.dirname(self.start_poses_file), exist_ok=True)
         
@@ -178,7 +180,6 @@ class BaseDatasetConfig:
                     row[obj_name] = json.dumps(state.tolist())
                 writer.writerow(row)
 
-    # for now, only implement object random API (will return fixed poses instead of random poses (TODO))
     def get_random_object_pose(self, props: SimProps) -> Dict[str, torch.Tensor]:
         """
         Get random object positions
@@ -218,6 +219,7 @@ class BaseDatasetConfig:
 
         return {}
 
+    @abstractmethod
     def get_targets(
         self, start: SimState
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -234,6 +236,7 @@ class BaseDatasetConfig:
         """
         raise NotImplementedError("get_targets must be implemented by subclass")
 
+    @abstractmethod
     def is_success(
         self, start: SimState, end: SimState
     ) -> tuple[
