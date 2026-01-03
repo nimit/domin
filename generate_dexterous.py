@@ -1,3 +1,5 @@
+# isort: skip_file
+
 """
 Script to run the DexSuite dataset generation.
 """

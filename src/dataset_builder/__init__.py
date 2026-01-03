@@ -1,14 +1,15 @@
-from pathlib import Path
+import os
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
+import torch
+
+from .src.control_utils import sanity_check_dataset_resume
 from .src.image_writer import safe_stop_image_writer
 from .src.lerobot_dataset import LeRobotDataset
 from .src.utils import build_dataset_frame, hw_to_dataset_features
-from .src.control_utils import sanity_check_dataset_resume
-import os
-import torch
-from typing import Any
 
 # DEFAULT_FEATURES = {
 #     "timestamp": {"dtype": "float32", "shape": (1,), "names": None},

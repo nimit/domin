@@ -1,14 +1,14 @@
 from dataclasses import dataclass, field
-import torch
+from typing import Dict, Optional, Tuple
+
 import numpy as np
-from typing import Tuple, Optional, Dict
+import torch
+from isaaclab.assets import ArticulationCfg
+from isaaclab_assets.robots import KUKA_ALLEGRO_CFG
 
 from src.base_dataset_config import BaseDatasetConfig
 from src.dexsuite_scene import DexSuiteSceneCfg
 from src.sim_state import SimState
-
-from isaaclab_assets.robots import KUKA_ALLEGRO_CFG
-from isaaclab.assets import ArticulationCfg
 
 
 @dataclass

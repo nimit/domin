@@ -1,9 +1,11 @@
-import sys
 import os
 import shutil
-import torch
-import numpy as np
+import sys
 from pathlib import Path
+
+import numpy as np
+import torch
+
 from dataset_builder import DatasetRecord, DatasetRecordConfig
 
 
