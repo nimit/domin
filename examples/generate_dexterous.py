@@ -23,8 +23,8 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 # Import after launching app
-from src.dexsuite_dataset_config import DexsuiteDatasetConfig
-from src.simulation_controller import SimulationController
+from dexterous_dataset_config import DexsuiteDatasetConfig
+from sim_dataset_gen.simulation_controller import SimulationController
 
 
 def main():

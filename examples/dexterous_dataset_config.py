@@ -6,9 +6,10 @@ import torch
 from isaaclab.assets import ArticulationCfg
 from isaaclab_assets.robots import KUKA_ALLEGRO_CFG
 
-from src.base_dataset_config import BaseDatasetConfig
-from src.dexsuite_scene import DexSuiteSceneCfg
-from src.sim_state import SimState
+from sim_dataset_gen.base_dataset_config import BaseDatasetConfig
+from sim_dataset_gen.sim_state import SimState
+# Note: DexSuiteSceneCfg is now in this same examples folder.
+from dexterous_scene import DexSuiteSceneCfg
 
 
 @dataclass

@@ -6,39 +6,10 @@ from typing import Any
 
 import torch
 
-from .src.control_utils import sanity_check_dataset_resume
-from .src.image_writer import safe_stop_image_writer
-from .src.lerobot_dataset import LeRobotDataset
-from .src.utils import build_dataset_frame, hw_to_dataset_features
-
-# DEFAULT_FEATURES = {
-#     "timestamp": {"dtype": "float32", "shape": (1,), "names": None},
-#     "frame_index": {"dtype": "int64", "shape": (1,), "names": None},
-#     "episode_index": {"dtype": "int64", "shape": (1,), "names": None},
-#     "index": {"dtype": "int64", "shape": (1,), "names": None},
-#     "task_index": {"dtype": "int64", "shape": (1,), "names": None},
-# }
-
-# (height, width, channels) for image
-# FEATS = {
-#     "observation.images.fixed_cam": {"dtype": "image", "shape": (480, 640, 3), "names": None},
-#     "observation.joint_pos": {"dtype": "float32", "shape": (6, ), "names": None},
-#     "action.joint_pos": {"dtype": "float32", "shape": (6, ), "names": None},
-
-#     "observation.a_1": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "observation.a_2": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "observation.a_3": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "observation.a_4": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "observation.a_5": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "observation.a_6": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "action.a_1": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "action.a_2": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "action.a_3": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "action.a_4": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "action.a_5": {"dtype": "float32", "shape": (1, ), "names": None},
-#     "action.a_6": {"dtype": "float32", "shape": (1, ), "names": None},
-
-# }
+from .control_utils import sanity_check_dataset_resume
+from .image_writer import safe_stop_image_writer
+from .lerobot_dataset import LeRobotDataset
+from .utils import build_dataset_frame, hw_to_dataset_features
 
 
 @dataclass
@@ -107,16 +78,6 @@ class DatasetRecord:
             **hw_to_dataset_features(self.action_features, "action", cfg.video),  # type: ignore
         }
 
-        # print(f"Motor Features: {self.motor_features}")
-        # print("=" * 45)
-        # print(f"Camera Features: {self.camera_features}")
-        # print("=" * 45)
-        # print(f"Observation Features: {self.observation_features}")
-        # print("=" * 45)
-        # print(f"Action Features: {self.action_features}")
-        # print("=" * 45)
-        # print(f"Features: {self.features}")
-
         self.current_task = None
 
         if cfg.resume_recording and os.path.exists(cfg.root):
@@ -158,7 +119,7 @@ class DatasetRecord:
         if self.cfg.resume_recording:
             self.episode_counter = self.dataset.meta.total_episodes
         return self
-
+    
     def __exit__(self, exc_type, exc_value, traceback):
         print("Exited context manager....")
         self.finish_episodes(list(self.active_episodes.keys()))
@@ -193,18 +154,6 @@ class DatasetRecord:
 
             self.active_episodes[env_idx] = episode_index
 
-            # Set task for this episode if provided
-            if tasks and env_idx < len(tasks):
-                # We need a way to set task per episode in LeRobotDataset or just pass it to add_frame
-                # Currently add_frame takes a task string.
-                # We can store current tasks in a dict
-                pass
-                # TODO: Support per-episode task in step/add_frame?
-                # Have to also determine how to handle episode task in case of re-record
-                # For now, we rely on self.current_task or cfg.default_task.
-                # If tasks list is provided, we might need to store it.
-        self.steps_in_story = 0
-
     def finish_episodes(self, env_idxs: int | list[int] | torch.Tensor):
         if isinstance(env_idxs, int):
             env_idxs = [env_idxs]
@@ -217,10 +166,9 @@ class DatasetRecord:
 
             episode_index = self.active_episodes[env_idx]
             print(f"Saving episode {episode_index} (env {env_idx})")
+            # TODO: DELETE IMAGES?
             self.dataset.save_episode(episode_index)
             del self.active_episodes[env_idx]
-
-        # Removed push_to_hub from here as requested
 
     def rerecord(self, env_idxs: int | list[int] | torch.Tensor):
         if isinstance(env_idxs, int):
@@ -251,9 +199,7 @@ class DatasetRecord:
 
     def save_metadata(self, key: str, value: Any):
         self.dataset.save_metadata(key, value)
-
-    # observation = {images: {}, motors: []}
-    # action = {motors: []}
+    
     @safe_stop_image_writer
     def step(
         self,

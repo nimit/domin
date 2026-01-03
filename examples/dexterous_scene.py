@@ -6,7 +6,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab_assets.robots import KUKA_ALLEGRO_CFG
 
-from .utils import xyz_to_quat
+from sim_dataset_gen.utils import xyz_to_quat
 
 
 @configclass

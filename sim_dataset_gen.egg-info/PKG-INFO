@@ -1,0 +1,52 @@
+Metadata-Version: 2.4
+Name: sim_dataset_gen
+Version: 0.1.0
+Summary: A package for generating robotics datasets using Isaac Sim and Isaac Lab
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.4.0
+Requires-Dist: torchvision>=0.19.0
+Requires-Dist: datasets>=4.4.1
+Requires-Dist: jsonlines>=4.0.0
+Requires-Dist: av>=16.0.1
+Requires-Dist: decord>=0.6.0
+Requires-Dist: deepdiff>=8.6.1
+Requires-Dist: isaaclab[isaacsim]>=0.48.8
+Requires-Dist: stable-baselines3>=2.7.0
+Requires-Dist: scene-synthesizer
+Requires-Dist: xatlas
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: isort; extra == "dev"
+
+# Sim Dataset Gen
+A package for generating robotics datasets using Isaac Sim and Isaac Lab.
+
+## Installation
+
+You can install this package via pip. Note that you must specify the NVIDIA PyPI index for `isaacsim` and related dependencies.
+
+```bash
+pip install . --extra-index-url https://pypi.nvidia.com
+```
+
+### Development
+For development, you can use the optional dev dependencies:
+
+```bash
+pip install -e .[dev] --extra-index-url https://pypi.nvidia.com
+```
+
+## Structure
+- `sim_dataset_gen/`: Core package source code.
+- `examples/`: Example scripts and configurations (e.g., `generate_dexterous.py`).
+- `tests/`: Tests for the package.
+
+## Usage
+To run the example generation script:
+
+```bash
+# Verify installation
+python examples/generate_dexterous.py --num_episodes 10 --num_envs 4
+```

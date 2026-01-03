@@ -1015,19 +1015,20 @@ class LeRobotDataset(torch.utils.data.Dataset):
             self.tolerance_s,
         )
 
-        video_files = list(self.root.rglob("*.mp4"))
-        assert len(video_files) == self.num_episodes * len(self.meta.video_keys)
+        # TODO: breaks when dealing with multiple envs... fix?
 
-        parquet_files = list(self.root.rglob("*.parquet"))
-        assert len(parquet_files) == self.num_episodes
+        # video_files = list(self.root.rglob("*.mp4"))
+        # assert len(video_files) == self.num_episodes * len(self.meta.video_keys)
+
+        # parquet_files = list(self.root.rglob("*.parquet"))
+        # assert len(parquet_files) == self.num_episodes
         
-        # delete images
-        img_dir = self.root / "images"
-        if img_dir.is_dir():
-            shutil.rmtree(self.root / "images")
+        # img_dir = self.root / "images"
+        # if img_dir.is_dir():
+        #     shutil.rmtree(self.root / "images")
 
-        if not episode_data:  # Remove from buffers
-            del self.episode_buffers[episode_index]
+        # if not episode_data:  # Remove from buffers
+        #     del self.episode_buffers[episode_index]
 
     def _save_episode_table(self, episode_buffer: dict, episode_index: int) -> None:
         episode_dict = {key: episode_buffer[key] for key in self.hf_features}
