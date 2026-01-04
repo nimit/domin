@@ -1,2 +1,2 @@
 [console_scripts]
-domin = domin.generate_dataset:main
+domin-gen = domin.generate_dataset:main

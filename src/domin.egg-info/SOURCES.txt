@@ -1,4 +1,5 @@
 LICENSE
+NOTICE
 README.md
 pyproject.toml
 src/domin/__init__.py
