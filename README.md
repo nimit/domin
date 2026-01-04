@@ -2,6 +2,8 @@
 
 > _A high-throughput orchestrator for synthetic robotics datasets; named after Harry Domin of R.U.R., the visionary who sought to free humanity from labor through the mass production of robots._
 
+https://github.com/user-attachments/assets/2c1fd1f9-5a07-4d86-967a-4572f3b0ef62
+
 `domin` makes the generation of synthetic datasets for Visual-Language-Action (VLA) models easy, performant, and scalable.
 
 While most current simulation in robotics is geared towards Reinforcement Learning (RL), this package leverages the same massively parallel, multi-environment paradigm to generate training data. This allows you to produce large-scale datasets using [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac-sim) and [Isaac Lab](https://github.com/isaac-sim/IsaacLab) with a **single configuration file**.
