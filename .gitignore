@@ -4,3 +4,4 @@ archive/
 datasets/
 build/
 dist/
+*.egg-info/

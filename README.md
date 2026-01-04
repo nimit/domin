@@ -23,7 +23,7 @@ Key features inherited from our extended `dataset_builder`:
 You can install this package via pip. Note that you must specify the NVIDIA PyPI index for `isaacsim` and related dependencies.
 
 ```bash
-pip install . --extra-index-url https://pypi.nvidia.com
+pip install domin --extra-index-url https://pypi.nvidia.com
 ```
 
 For advanced installation instructions, including setting up Isaac Sim and creating a development environment, please see [CONTRIBUTING.md](CONTRIBUTING.md).
