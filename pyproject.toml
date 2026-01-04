@@ -25,9 +25,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "black",
+    "ruff",
     "isort"
 ]
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 packages = ["sim_dataset_gen", "sim_dataset_gen.dataset_builder"]
+
+[project.scripts]
+simgen = "sim_dataset_gen.generate_dataset:main"

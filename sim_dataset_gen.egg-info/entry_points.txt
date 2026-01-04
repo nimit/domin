@@ -1,0 +1,2 @@
+[console_scripts]
+simgen = sim_dataset_gen.generate_dataset:main

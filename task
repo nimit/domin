@@ -1,0 +1,7 @@
+add an extensive README.md and CONTRIBUTING.md (encapsulate specific installation instructions there)
+use the readme to show off the package features
+
+the package produces datasets in the popular LeRobot format open-sourced by HuggingFace. Acknowledge their contributions and also mention that the sim_dataset_gen.dataset_builder is a modified version of the dataset builder in the LeRobot package.
+
+run example:
+`python sim_dataset_gen/generate_dataset.py examples/dexterous_dataset_config.py --num_envs 10 --num_episodes 100`
