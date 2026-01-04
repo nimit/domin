@@ -1,6 +1,6 @@
 # Contributing to Sim Dataset Gen
 
-Thank you for your interest in contributing to `sim_dataset_gen`! This guide provides detailed instructions on how to set up your development environment and install the necessary dependencies.
+Thank you for your interest in contributing to `domin`! This guide provides detailed instructions on how to set up your development environment and install the necessary dependencies.
 
 ## Installation & Setup
 
@@ -10,9 +10,9 @@ This package relies on NVIDIA Isaac Sim and Isaac Lab.
 - Python 3.10 or higher.
 - `pip` (or `uv` for faster installation).
 
-### Installation
+### 4. Install Domin
 
-You can install the package and its development dependencies in one go. You must specify the NVIDIA PyPI index.
+Finally, install `domin` in editable mode with development dependencies. in one go. You must specify the NVIDIA PyPI index.
 
 ```bash
 # Install in editable mode with dev dependencies

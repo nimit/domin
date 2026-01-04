@@ -1,0 +1,2 @@
+[console_scripts]
+domin = domin.generate_dataset:main

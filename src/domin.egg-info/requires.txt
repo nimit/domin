@@ -1,0 +1,16 @@
+torch>=2.4.0
+torchvision>=0.19.0
+datasets>=4.4.1
+jsonlines>=4.0.0
+av>=16.0.1
+decord>=0.6.0
+deepdiff>=8.6.1
+isaaclab[isaacsim]>=0.48.8
+stable-baselines3>=2.7.0
+scene-synthesizer
+xatlas
+
+[dev]
+pytest
+ruff
+isort

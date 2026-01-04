@@ -10,7 +10,7 @@ def test_generate_dexterous_dry_run():
     """
     example_script = os.path.join("examples", "generate_dexterous.py")
     
-    # Needs to be run in an environment where sim_dataset_gen is installed
+    # Needs to be run in an environment where domin is installed
     # check if file exists
     assert os.path.exists(example_script), "Example script not found"
 

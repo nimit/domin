@@ -15,7 +15,7 @@ def load_config_from_path(path: str):
     import os
     import sys
 
-    from sim_dataset_gen.base_dataset_config import BaseDatasetConfig
+    from domin.base_dataset_config import BaseDatasetConfig
 
     module_name = os.path.basename(path).replace(".py", "")
 
@@ -55,7 +55,7 @@ def main():
     from isaaclab.app import AppLauncher
 
     parser = argparse.ArgumentParser(
-        description="Generate Dataset using Sim Dataset Gen"
+        description="Generate Dataset using Domin"
     )
     parser.add_argument(
         "config_path",
@@ -79,7 +79,7 @@ def main():
     app_launcher = AppLauncher(args_cli)
     simulation_app = app_launcher.app
 
-    from sim_dataset_gen.simulation_controller import SimulationController
+    from domin.simulation_controller import SimulationController
 
     config_cls = load_config_from_path(config_path)
 

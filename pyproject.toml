@@ -3,11 +3,18 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sim_dataset_gen"
+name = "domin"
 version = "0.1.0"
-description = "Easy and performant synthetic dataset generation for VLA models using Isaac Sim/Lab multi-env simulation."
+description = "Easy and performant synthetic dataset generation for VLA models using Isaac Sim multi-env simulation."
 readme = "README.md"
 requires-python = ">=3.10"
+license = {file = "LICENSE"}
+license-files = ["LICENSE", "NOTICE"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "torch>=2.4.0",
     "torchvision>=0.19.0",
@@ -31,11 +38,11 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["sim_dataset_gen", "sim_dataset_gen.dataset_builder"]
+packages = ["domin", "domin.dataset_builder"]
 
 [project.scripts]
-simgen = "sim_dataset_gen.generate_dataset:main"
+domin-gen = "domin.generate_dataset:main"
 
 [project.urls]
-Homepage = "https://github.com/nimit/sim_dataset_gen"
-Issues = "https://github.com/nimit/sim_dataset_gen/issues"
+Homepage = "https://github.com/nimit/domin"
+Issues = "https://github.com/nimit/domin/issues"

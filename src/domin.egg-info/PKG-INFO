@@ -1,6 +1,32 @@
+Metadata-Version: 2.4
+Name: domin
+Version: 0.1.0
+Summary: Easy and performant synthetic dataset generation for VLA models using Isaac Sim multi-env simulation.
+Project-URL: Homepage, https://github.com/nimit/domin
+Project-URL: Issues, https://github.com/nimit/domin/issues
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: torch>=2.4.0
+Requires-Dist: torchvision>=0.19.0
+Requires-Dist: datasets>=4.4.1
+Requires-Dist: jsonlines>=4.0.0
+Requires-Dist: av>=16.0.1
+Requires-Dist: decord>=0.6.0
+Requires-Dist: deepdiff>=8.6.1
+Requires-Dist: isaaclab[isaacsim]>=0.48.8
+Requires-Dist: stable-baselines3>=2.7.0
+Requires-Dist: scene-synthesizer
+Requires-Dist: xatlas
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: isort; extra == "dev"
+Dynamic: license-file
+
 # Domin
 
-> _A high-throughput orchestrator for synthetic robotics datasets; named after Harry Domin of R.U.R., the visionary who sought to free humanity from labor through the mass production of robots._
+> _Named for Harry Domin, the protagonist of R.U.R. who sought to free humanity from drudgery through the mass production of robots; a tool for the mass production of VLA datasets._
 
 `domin` makes the generation of synthetic datasets for Visual-Language-Action (VLA) models easy, performant, and scalable.
 
@@ -30,14 +56,12 @@ For advanced installation instructions, including setting up Isaac Sim and creat
 
 ## Usage
 
-To generate a dataset, use the `domin-gen` command with a dataset configuration file.
-
-The dataset configuration file should inherit `domin.base_dataset_config.BaseDatasetConfig` (see example).
+To generate a dataset, use the `domin.generate_dataset` module with a dataset configuration file.
 
 ### Example
 
 ```bash
-domin-gen examples/dexterous_dataset_config.py --num_envs 10 --num_episodes 100
+python -m domin.generate_dataset examples/dexterous_dataset_config.py --num_envs 10 --num_episodes 100
 ```
 
 ### Arguments

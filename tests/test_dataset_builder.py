@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from sim_dataset_gen.dataset_builder import DatasetRecord, DatasetRecordConfig
+from domin.dataset_builder import DatasetRecord, DatasetRecordConfig
 
 
 def test_simultaneous_recording():
