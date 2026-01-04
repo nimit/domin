@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sim_dataset_gen"
 version = "0.1.0"
-description = "A package for generating robotics datasets using Isaac Sim and Isaac Lab"
+description = "Easy and performant synthetic dataset generation for VLA models using Isaac Sim/Lab multi-env simulation."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -35,3 +35,7 @@ packages = ["sim_dataset_gen", "sim_dataset_gen.dataset_builder"]
 
 [project.scripts]
 simgen = "sim_dataset_gen.generate_dataset:main"
+
+[project.urls]
+Homepage = "https://github.com/nimit/sim_dataset_gen"
+Issues = "https://github.com/nimit/sim_dataset_gen/issues"

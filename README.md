@@ -1,6 +1,8 @@
 # Sim Dataset Gen
 
-`sim_dataset_gen` is a comprehensive package for generating large-scale robotics datasets using [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac-sim) and [Isaac Lab](https://github.com/isaac-sim/IsaacLab). It is designed to facilitate high-fidelity simulation and data collection for training Visual-Language-Action (VLA) models.
+`sim_dataset_gen` makes the generation of synthetic datasets for Visual-Language-Action (VLA) models easy, performant, and scalable.
+
+While most current simulation in robotics is geared towards Reinforcement Learning (RL), this package leverages the same massively parallel, multi-environment paradigm to generate training data. This allows you to produce large-scale datasets using [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac-sim) and [Isaac Lab](https://github.com/isaac-sim/IsaacLab) with a **single configuration file**.
 
 ## Features
 
