@@ -14,8 +14,8 @@ This package generates datasets in the popular **LeRobot** format, compatible wi
 
 Key features inherited from our extended `dataset_builder`:
 
+- **Ease of Use**: A single command to install the package and a single configuration file can generate a complete dataset.
 - **Simultaneous Episode Recording**: Record multiple episodes (environments) in parallel for high throughput, significantly speeding up data generation.
-- **Story Mode**: Episodes are grouped into "stories" (batches) for efficient management and synchronized resetting.
 - **Scheduled Re-recording**: Robust handling of failed episodes. If an episode fails, it is automatically cleared and scheduled for a retry in the next batch, ensuring dataset completeness without manual intervention.
 - **Metadata & Custom Metrics**: Easily save arbitrary metadata (e.g., success rates, simulation parameters) and automatically compute episode statistics in the dataset's `info.json`.
 - **LeRobot Format Compatibility**: Produces datasets in the standard LeRobot format (Parquet files with embedded or external images), ready for training.
@@ -42,7 +42,7 @@ The dataset configuration file should inherit `domin.base_dataset_config.BaseDat
 domin-gen examples/dexterous_dataset_config.py --num_envs 10 --num_episodes 100
 ```
 
-### Arguments
+#### Arguments
 
 - `config_path`: Path to the Python file containing the dataset configuration (e.g., `examples/dexterous_dataset_config.py`).
 - `--num_envs`: (Optional) Number of parallel environments to simulate (default: 1).
